@@ -6,39 +6,78 @@ const auth = require("../middleware/auth");
 
 const router = express.Router();
 
+/* =========================================================
+   UPLOAD DOCUMENTS (HARDENED)
+   ========================================================= */
+
 router.post(
   "/:appointmentId/documents",
   auth.authenticate,
+
+  /* ---------- Multer wrapper with logging + error handling ---------- */
   (req, res, next) => {
+    console.log("▶ [UPLOAD] Multer upload started");
+
+    let responded = false;
+
+    // Safety timeout (30 seconds)
+    const timeout = setTimeout(() => {
+      if (!responded) {
+        responded = true;
+        console.error("⏱ [UPLOAD] Timeout exceeded");
+        return res.status(504).json({
+          message: "Upload timed out. Please try again.",
+        });
+      }
+    }, 30_000);
+
     upload.array("documents")(req, res, (err) => {
+      clearTimeout(timeout);
+
+      if (responded) return;
+
       if (err) {
-        console.error("Upload error:", err);
+        responded = true;
+        console.error("❌ [UPLOAD] Multer/Cloudinary error:", err);
         return res.status(400).json({
-          message: "Upload failed",
+          message: "File upload failed",
           error: err.message,
         });
       }
+
+      console.log("✔ [UPLOAD] Multer upload finished");
       next();
     });
   },
+
+  /* ---------- Business logic ---------- */
   async (req, res) => {
     try {
+      console.log("▶ [UPLOAD] Handler started");
+
       if (req.auth.type !== "doctor") {
+        console.warn("⛔ [UPLOAD] Forbidden: non-doctor");
         return res.status(403).json({ message: "Forbidden" });
       }
 
-      const appointment = await Appointment.findById(req.params.appointmentId);
+      const { appointmentId } = req.params;
+
+      const appointment = await Appointment.findById(appointmentId);
       if (!appointment) {
+        console.warn("❓ [UPLOAD] Appointment not found:", appointmentId);
         return res.status(404).json({ message: "Appointment not found" });
       }
 
       if (!req.files || req.files.length === 0) {
+        console.warn("📭 [UPLOAD] No files received");
         return res.status(400).json({ message: "No files uploaded" });
       }
 
-      const docs = req.files.map((f) => ({
-        url: f.path,
-        key: f.filename,
+      console.log("📦 [UPLOAD] Files received:", req.files.length);
+
+      const docs = req.files.map((file) => ({
+        url: file.path,
+        key: file.filename,
         type: "other",
         uploadedBy: "doctor",
       }));
@@ -46,34 +85,53 @@ router.post(
       appointment.documents.push(...docs);
       await appointment.save();
 
-      res.json(docs);
+      console.log("✅ [UPLOAD] Documents saved to appointment");
+
+      return res.json(docs);
     } catch (error) {
-      console.error("Handler error:", error);
-      res.status(500).json({ message: "Server error" });
+      console.error("🔥 [UPLOAD] Handler error:", error);
+      return res.status(500).json({
+        message: "Server error during upload",
+      });
     }
   },
 );
 
-/**
- * Delete document
- */
+/* =========================================================
+   DELETE DOCUMENT (HARDENED)
+   ========================================================= */
+
 router.delete(
   "/:appointmentId/documents/:key",
   auth.authenticate,
   async (req, res) => {
-    if (req.auth.type !== "doctor")
-      return res.status(403).json({ message: "Forbidden" });
+    try {
+      if (req.auth.type !== "doctor") {
+        return res.status(403).json({ message: "Forbidden" });
+      }
 
-    await cloudinary.uploader.destroy(req.params.key, {
-      resource_type: "raw",
-    });
+      const { appointmentId, key } = req.params;
 
-    await Appointment.updateOne(
-      { _id: req.params.appointmentId },
-      { $pull: { documents: { key: req.params.key } } },
-    );
+      console.log("🗑 [DELETE] Deleting document:", key);
 
-    res.json({ success: true });
+      await cloudinary.uploader.destroy(key, {
+        invalidate: true,
+      });
+
+      await Appointment.updateOne(
+        { _id: appointmentId },
+        { $pull: { documents: { key } } },
+      );
+
+      console.log("✅ [DELETE] Document deleted");
+
+      return res.json({ success: true });
+    } catch (error) {
+      console.error("🔥 [DELETE] Error:", error);
+      return res.status(500).json({
+        message: "Failed to delete document",
+      });
+    }
   },
 );
 
