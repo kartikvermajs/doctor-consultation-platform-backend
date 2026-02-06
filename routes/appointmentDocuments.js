@@ -14,7 +14,8 @@ router.post(
     const appointment = await Appointment.findById(req.params.appointmentId);
     if (!appointment) return res.status(404).json({ message: "Not found" });
 
-    if (req.user.type !== "doctor")
+    if (req.auth.type
+ !== "doctor")
       return res.status(403).json({ message: "Forbidden" });
 
     const docs = req.files.map((f) => ({
@@ -35,7 +36,8 @@ router.post(
  * Delete document
  */
 router.delete("/:appointmentId/documents/:key", auth.authenticate, async (req, res) => {
-  if (req.user.type !== "doctor")
+  if (req.auth.type
+ !== "doctor")
     return res.status(403).json({ message: "Forbidden" });
 
   await cloudinary.uploader.destroy(req.params.key, {
