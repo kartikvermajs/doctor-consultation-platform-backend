@@ -6,12 +6,9 @@ const auth = require("../middleware/auth");
 
 const router = express.Router();
 
-/**
- * Upload documents
- */
 router.post(
   "/:appointmentId/documents",
-  auth,
+  auth.authenticate,
   upload.array("documents"),
   async (req, res) => {
     const appointment = await Appointment.findById(req.params.appointmentId);
@@ -37,7 +34,7 @@ router.post(
 /**
  * Delete document
  */
-router.delete("/:appointmentId/documents/:key", auth, async (req, res) => {
+router.delete("/:appointmentId/documents/:key", auth.authenticate, async (req, res) => {
   if (req.user.type !== "doctor")
     return res.status(403).json({ message: "Forbidden" });
 
