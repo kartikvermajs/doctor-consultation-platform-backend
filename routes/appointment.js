@@ -32,15 +32,18 @@ router.get(
 
       const appointment = await Appointment.find(filter)
         .populate("patientId", "name email phone dob age profileImage")
-        .populate("doctorId", "name fees phone specialization profileImage hospitalInfo")
+        .populate(
+          "doctorId",
+          "name fees phone specialization profileImage hospitalInfo",
+        )
         .sort({ slotStartIso: 1, slotEndIso: 1 });
 
       res.ok(appointment, "Appointment fetched successfully");
     } catch (error) {
       console.error("Doctor appointment fetch error", error);
-      res, serverError("Failed to fetch appointment", [error.message]);
+      (res, serverError("Failed to fetch appointment", [error.message]));
     }
-  }
+  },
 );
 
 //patient appointmnet
@@ -69,7 +72,7 @@ router.get(
       const appointment = await Appointment.find(filter)
         .populate(
           "doctorId",
-          "name fees phone specialization hospitalInfo profileImage"
+          "name fees phone specialization hospitalInfo profileImage",
         )
         .populate("patientId", "name email profileImage")
         .sort({ slotStartIso: 1, slotEndIso: 1 });
@@ -77,9 +80,9 @@ router.get(
       res.ok(appointment, "Appointment fetched successfully");
     } catch (error) {
       console.error("Patient appointment fetch error", error);
-      res, serverError("Failed to fetch appointment", [error.message]);
+      (res, serverError("Failed to fetch appointment", [error.message]));
     }
-  }
+  },
 );
 
 //Get booked slot for doctor on specific date
@@ -101,7 +104,7 @@ router.get("/booked-slots/:doctorId/:date", async (req, res) => {
 
     res.ok(bookedSlot, "Booked slot retrieved");
   } catch (error) {
-    res, serverError("Failed to fetch booked slot", [error.message]);
+    (res, serverError("Failed to fetch booked slot", [error.message]));
   }
 });
 
@@ -179,14 +182,14 @@ router.post("/book", authenticate, requireRole("patient"), [
 
       await appointment.populate(
         "doctorId",
-        "name fees phone specialization hospitalInfo profileImage"
+        "name fees phone specialization hospitalInfo profileImage",
       );
       await appointment.populate("patientId", "name email");
 
       res.created(appointment, "Appointment booked successfully");
     } catch (error) {
       console.error("Book appointment error", error);
-      res, serverError("Failed to book appointment", [error.message]);
+      (res, serverError("Failed to book appointment", [error.message]));
     }
   },
 ]);
@@ -207,39 +210,43 @@ router.get("/join/:id", authenticate, async (req, res) => {
 
     res.ok(
       { roomId: appointment.zegoRoomId, appointment },
-      "Consultation joined successfully"
+      "Consultation joined successfully",
     );
   } catch (error) {
     console.error("Join consultation error", error);
-    res, serverError("Failed to Join consultation", [error.message]);
+    (res, serverError("Failed to Join consultation", [error.message]));
   }
 });
 
 //End
-router.put("/end/:id", authenticate, async (req, res) => {
-  try {
-    const { prescription, notes } = req.body;
-    const appointment = await Appointment.findByIdAndUpdate(
-      req.params.id,
-      {
-        status: "Completed",
-        prescription,
-        notes,
-        updatedAt: new Date(),
-      },
-      { new: true }
-    ).populate("patientId doctorId");
+router.put(
+  "/end/:id",
+  authenticate,
+  requireRole("doctor"),
+  async (req, res) => {
+    try {
+      const { prescriptionText, notes } = req.body;
 
-    if (!appointment) {
-      return res.notFound("Appointment not found");
+      const appointment = await Appointment.findById(req.params.id);
+
+      if (!appointment) return res.notFound("Appointment not found");
+
+      if (appointment.doctorId.toString() !== req.auth.id) {
+        return res.forbidden("Access denied");
+      }
+
+      appointment.status = "Completed";
+      appointment.prescriptionText = prescriptionText || "";
+      appointment.notes = notes || "";
+
+      await appointment.save();
+
+      res.ok(appointment, "Consultation completed");
+    } catch (error) {
+      res.serverError("Failed to complete consultation", [error.message]);
     }
-
-    res.ok(appointment, "Consultation completed successfully");
-  } catch (error) {
-    console.error("End consultation error", error);
-    res, serverError("Failed to End consultation", [error.message]);
-  }
-});
+  },
+);
 
 //update appointment status by doctor
 router.put(
@@ -250,7 +257,7 @@ router.put(
     try {
       const { status } = req.body;
       const appointment = await Appointment.findById(req.params.id).populate(
-        "patientId doctorId"
+        "patientId doctorId",
       );
 
       if (!appointment) {
@@ -268,9 +275,10 @@ router.put(
       res.ok(appointment, "Appointment status updated successfully");
     } catch (error) {
       console.error("updated Appointment status error", error);
-      res, serverError("Failed to updated Appointment status", [error.message]);
+      (res,
+        serverError("Failed to updated Appointment status", [error.message]));
     }
-  }
+  },
 );
 
 //Get single appointment by id
@@ -281,7 +289,7 @@ router.get("/:id", authenticate, async (req, res) => {
       .populate("patientId", "name email phone dob age profileImage")
       .populate(
         "doctorId",
-        "name fees phone specialization hospitalInfo profileImage"
+        "name fees phone specialization hospitalInfo profileImage",
       );
 
     if (!appointment) {
@@ -307,8 +315,62 @@ router.get("/:id", authenticate, async (req, res) => {
     res.ok({ appointment }, "Appointment fetched successfully");
   } catch (error) {
     console.error("Get appointment error", error);
-    res, serverError("Failed to Get appointment", [error.message]);
+    (res, serverError("Failed to Get appointment", [error.message]));
   }
 });
+
+router.post(
+  "/:id/documents",
+  authenticate,
+  requireRole("doctor"),
+  async (req, res) => {
+    try {
+      const { files } = req.body;
+
+      const appointment = await Appointment.findById(req.params.id);
+      if (!appointment) return res.notFound("Appointment not found");
+
+      if (appointment.doctorId.toString() !== req.auth.id) {
+        return res.forbidden("Access denied");
+      }
+
+      appointment.documents.push(
+        ...files.map((f) => ({
+          url: f.url,
+          key: f.key,
+          type: f.type || "other",
+        })),
+      );
+
+      await appointment.save();
+      res.ok(appointment, "Documents added");
+    } catch (err) {
+      res.serverError("Failed to add documents", [err.message]);
+    }
+  },
+);
+
+router.delete(
+  "/:id/documents/:key",
+  authenticate,
+  requireRole("doctor"),
+  async (req, res) => {
+    try {
+      const { id, key } = req.params;
+
+      const appointment = await Appointment.findById(id);
+      if (!appointment) return res.notFound("Appointment not found");
+
+      appointment.documents = appointment.documents.filter(
+        (doc) => doc.key !== key,
+      );
+
+      await appointment.save();
+      res.ok(appointment, "Document deleted");
+    } catch (err) {
+      res.serverError("Failed to delete document", [err.message]);
+    }
+  },
+);
 
 module.exports = router;
