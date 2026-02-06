@@ -12,9 +12,9 @@ router.post(
   (req, res, next) => {
     upload.array("documents")(req, res, (err) => {
       if (err) {
-        console.error("Multer/Cloudinary error:", err);
+        console.error("Upload error:", err);
         return res.status(400).json({
-          message: "File upload failed",
+          message: "Upload failed",
           error: err.message,
         });
       }
@@ -29,7 +29,7 @@ router.post(
 
       const appointment = await Appointment.findById(req.params.appointmentId);
       if (!appointment) {
-        return res.status(404).json({ message: "Not found" });
+        return res.status(404).json({ message: "Appointment not found" });
       }
 
       if (!req.files || req.files.length === 0) {
@@ -48,7 +48,7 @@ router.post(
 
       res.json(docs);
     } catch (error) {
-      console.error("Upload handler error:", error);
+      console.error("Handler error:", error);
       res.status(500).json({ message: "Server error" });
     }
   },
