@@ -29,7 +29,7 @@ router.post(
           message: "Upload timed out. Please try again.",
         });
       }
-    }, 30_000);
+    }, 60_000);
 
     upload.array("documents")(req, res, (err) => {
       clearTimeout(timeout);
