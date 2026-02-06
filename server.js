@@ -6,6 +6,7 @@ const cors = require("cors");
 const bodyParser = require("body-parser");
 require("dotenv").config();
 require("./config/passport");
+const cloudinary = require("./config/cloudinary");
 const passportLib = require("passport");
 
 const response = require("./middleware/response");
