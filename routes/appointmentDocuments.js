@@ -9,47 +9,72 @@ const router = express.Router();
 router.post(
   "/:appointmentId/documents",
   auth.authenticate,
-  upload.array("documents"),
+  (req, res, next) => {
+    upload.array("documents")(req, res, (err) => {
+      if (err) {
+        console.error("Multer/Cloudinary error:", err);
+        return res.status(400).json({
+          message: "File upload failed",
+          error: err.message,
+        });
+      }
+      next();
+    });
+  },
   async (req, res) => {
-    const appointment = await Appointment.findById(req.params.appointmentId);
-    if (!appointment) return res.status(404).json({ message: "Not found" });
+    try {
+      if (req.auth.type !== "doctor") {
+        return res.status(403).json({ message: "Forbidden" });
+      }
 
-    if (req.auth.type
- !== "doctor")
-      return res.status(403).json({ message: "Forbidden" });
+      const appointment = await Appointment.findById(req.params.appointmentId);
+      if (!appointment) {
+        return res.status(404).json({ message: "Not found" });
+      }
 
-    const docs = req.files.map((f) => ({
-      url: f.path,
-      key: f.filename, // cloudinary public_id
-      type: "other",
-      uploadedBy: "doctor",
-    }));
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ message: "No files uploaded" });
+      }
 
-    appointment.documents.push(...docs);
-    await appointment.save();
+      const docs = req.files.map((f) => ({
+        url: f.path,
+        key: f.filename,
+        type: "other",
+        uploadedBy: "doctor",
+      }));
 
-    res.json(docs);
+      appointment.documents.push(...docs);
+      await appointment.save();
+
+      res.json(docs);
+    } catch (error) {
+      console.error("Upload handler error:", error);
+      res.status(500).json({ message: "Server error" });
+    }
   },
 );
 
 /**
  * Delete document
  */
-router.delete("/:appointmentId/documents/:key", auth.authenticate, async (req, res) => {
-  if (req.auth.type
- !== "doctor")
-    return res.status(403).json({ message: "Forbidden" });
+router.delete(
+  "/:appointmentId/documents/:key",
+  auth.authenticate,
+  async (req, res) => {
+    if (req.auth.type !== "doctor")
+      return res.status(403).json({ message: "Forbidden" });
 
-  await cloudinary.uploader.destroy(req.params.key, {
-    resource_type: "raw",
-  });
+    await cloudinary.uploader.destroy(req.params.key, {
+      resource_type: "raw",
+    });
 
-  await Appointment.updateOne(
-    { _id: req.params.appointmentId },
-    { $pull: { documents: { key: req.params.key } } },
-  );
+    await Appointment.updateOne(
+      { _id: req.params.appointmentId },
+      { $pull: { documents: { key: req.params.key } } },
+    );
 
-  res.json({ success: true });
-});
+    res.json({ success: true });
+  },
+);
 
 module.exports = router;
