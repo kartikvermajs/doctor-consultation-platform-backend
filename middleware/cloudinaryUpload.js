@@ -1,5 +1,5 @@
 const multer = require("multer");
-const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const CloudinaryStorage = require("multer-storage-cloudinary");
 const cloudinary = require("../config/cloudinary");
 
 /* =========================================================
@@ -18,11 +18,9 @@ const ALLOWED_MIME_TYPES = [...IMAGE_MIME_TYPES, ...PDF_MIME_TYPES];
 
 const storage = new CloudinaryStorage({
   cloudinary,
-  params: async (req, file) => {
-    // Determine resource type
+  params: (req, file) => {
     const isPdf = PDF_MIME_TYPES.includes(file.mimetype);
 
-    // Sanitize original filename
     const safeName = file.originalname
       .replace(/\s+/g, "_")
       .replace(/[^a-zA-Z0-9._-]/g, "")
@@ -38,7 +36,7 @@ const storage = new CloudinaryStorage({
 });
 
 /* =========================================================
-   MULTER FILE FILTER (HARD FAIL)
+   MULTER FILE FILTER
    ========================================================= */
 
 const fileFilter = (req, file, cb) => {
@@ -56,15 +54,15 @@ const fileFilter = (req, file, cb) => {
 };
 
 /* =========================================================
-   MULTER INSTANCE (HARDENED)
+   MULTER INSTANCE
    ========================================================= */
 
 const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10 MB per file
-    files: 5, // max 5 files per request
+    fileSize: 10 * 1024 * 1024, // 10MB per file
+    files: 5,
   },
 });
 
