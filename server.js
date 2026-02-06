@@ -57,5 +57,18 @@ app.get("/health", (req, res) =>
   res.ok({ time: new Date().toISOString() }, "OK"),
 );
 
+app.get("/api/cloudinary-health", async (req, res) => {
+  try {
+    const result = await cloudinary.api.ping();
+    res.json({ ok: true, result });
+  } catch (err) {
+    console.error("Cloudinary ping failed:", err);
+    res.status(500).json({
+      ok: false,
+      error: err.message,
+    });
+  }
+});
+
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => console.log(`Server listening on ${PORT}`));
