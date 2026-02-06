@@ -1,5 +1,5 @@
 const express = require("express");
-const Appointment = require("../models/Appointment");
+const Appointment = require("../modal/Appointment");
 const upload = require("../middleware/cloudinaryUpload");
 const cloudinary = require("../config/cloudinary");
 const auth = require("../middleware/auth");
